@@ -1,0 +1,48 @@
+# The config file contains all parameters that can / have to be changed for the analyses
+
+# Parameters for input and output data #########################################
+
+# Specify sample names here.
+samples: ["1_1h_DMSO_S1",
+"2_1h_DMSO_S2",
+"3_1h_DMSO_S3",
+"4_1h_DMSO_S4",
+"5_1h_Neratinib_S5",
+"6_1h_Neratinib_S6",
+"7_1h_Neratinib_S7",
+"8_1h_Neratinib_S8",
+"9_wt_6h_DMSO_S9",
+"10_wt_6h_DMSO_S10",
+"11_wt_6h_DMSO_S11",
+"12_wt_6h_DMSO_S12",
+"13_wt_6h_Neratinib_S13",
+"14_wt_6h_Neratinib_S14",
+"15_wt_6h_Neratinib_S15",
+"16_wt_6h_Neratinib_S16",
+"25_eh3-2mutant_1h_DMSO_S25",
+"26_eh3-2mutant_1h_DMSO_S26",
+"27_eh3-2mutant_1h_DMSO_S27",
+"28_eh3-2mutant_1h_DMSO_S28",
+"29_eh3-2mutant_1h_Neratinib_S29",
+"30_eh3-2mutant_1h_Neratinib_S30",
+"31_eh3-2mutant_1h_Neratinib_S31",
+"32_eh3-2mutant_1h_Neratinib_S32",
+"33_eh3-2mutant_6h_DMSO_S33",
+"34_eh3-2mutant_6h_DMSO_S34",
+"35_eh3-2mutant_6h_DMSO_S35",
+"36_eh3-2mutant_6h_DMSO_S36",
+"37_eh3-2mutant_6h_Neratinib_S37",
+"38_eh3-2mutant_6h_Neratinib_S38",
+"39_eh3-2mutant_6h_Neratinib_S39",
+"40_eh3-2mutant_6h_Neratinib_S40"]
+
+raw: "../raw/210601_NB551534_0082_AHGV7JBGXJ/fastq-files_no_lane_splitting"
+results: "../results" # Folder for results. It will be created.
+
+transcriptome: "http://ftp.ebi.ac.uk/ensemblgenomes/pub/release-51/plants/fasta/arabidopsis_thaliana/cdna/Arabidopsis_thaliana.TAIR10.cdna.all.fa.gz" # transcriptome for mapping and quantification
+gff: ""
+
+format: "fastq" # File format of the unzipped samples, i. e. "fasta" or "fastq".
+reads: ["R1"] # Read extension: a list with either ["R1", "R2"] for paired end or ["R1"] for single end. It is ignored for fasta files.
+adapter: "GATCGGAAGAGCA" # Illumina adapter sequence, the first 13bp are used here
+threads: 20 # Maximum number of threads used by single snakemake rule, the maximum is automatically set to cores.

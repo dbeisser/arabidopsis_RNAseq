@@ -1,0 +1,9 @@
+name: preprocessing
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - cutadapt
+  - fastqc
+  - multiqc

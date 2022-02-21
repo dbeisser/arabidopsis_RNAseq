@@ -1,0 +1,237 @@
+
+```{r setup, echo=FALSE, include=FALSE}
+# conda activate arabidosis
+knitr::opts_knit$set(root.dir = "/home/beisser/Documents/Botany/kaiser_RNA-seq")
+```
+
+```{r libs, echo=FALSE, include=FALSE}
+library(DESeq2) # version: 1.26.0
+library(ggplot2) # version: 3.3.3
+library("tximport") # version: 1.14.0
+library("readr") # version: 1.4.0
+library(GenomicFeatures) # version: 1.38.0
+library(RMariaDB) # version: 1.1.1
+library("pheatmap") # version: 1.0.12
+library(RColorBrewer) # version: 1.1-2
+library(reshape2) # version: 1.4.4
+library(MASS) # version: 7.3-54
+library(visreg) # version: 2.5_1
+library(pathview) # version: 1.26.0
+library(clusterProfiler) # version: 3.14.0
+library("org.At.tair.db") # version: 3.10.0
+library("tidytext") # version: 0.3.1
+```
+
+```{r sample info, echo=F}
+info <- read.table("info/cond.csv", header = T, sep=",")
+rownames(info) <- info$sample_name
+```
+
+# Statistical analysis
+
+## Create annotation for Arabidopsis
+
+```{r, echo=FALSE}
+# http://ftp.ebi.ac.uk/ensemblgenomes/pub/release-51/plants/gff3/arabidopsis_thaliana/Arabidopsis_thaliana.TAIR10.51.gff3.gz
+txdb <- makeTxDbFromGFF(file="info/Arabidopsis_thaliana.TAIR10.51.gff3",
+            dataSource="gff file for Arabidopsis",
+            organism="Arabidopsis thaliana")
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- biomaRt::select(txdb, k, "GENEID", "TXNAME")
+
+# remove "transcript from name"
+tx2gene$TXNAME <- unlist(lapply(tx2gene$TXNAME, function(x) strsplit(x, ":")[[1]][2]))
+# remove NAs
+tx2gene <- tx2gene[!is.na(tx2gene$GENEID),]
+
+geneid <- unlist(lapply(tx2gene$TXNAME, function(x) strsplit(x, "\\.")[[1]][1]))
+transcriptid <- tx2gene$GENEID
+
+gene2geneid <- geneid
+names(gene2geneid) <- transcriptid
+```
+
+
+## Load data
+
+```{r, echo=FALSE}
+files <- file.path("results/quant/", info$sample_name, "quant.sf")
+names(files) <- info$sample_name
+txi <- tximport(files, type="salmon", tx2gene=tx2gene)
+```
+
+## Create DESeq object and filter data
+
+```{r}
+library("DESeq2")
+ddsTxi <- DESeqDataSetFromTximport(txi,
+                                   colData = info,
+                                   design = ~ plant_line+time_point+treatment)
+```
+
+```{r}
+keep <- rowSums(counts(ddsTxi)) >= 10
+dds <- ddsTxi[keep,] # 1548 genes removed of 12811
+```
+
+Relevel factors:
+
+```{r}
+dds$plant_line <- relevel(dds$plant_line, ref = "wt")
+dds$treatment <- relevel(dds$treatment, ref = "DMSO")
+```
+
+
+## 1. Analyse data separately
+
+Set adj. p-value threshold to 0.1
+
+```{r}
+pthresh <- 0.1
+```
+
+
+Subset the data and look at wildtype and mutant separately at the different timepoints.
+
+### Wildtype
+
+Test for differentially expressed genes in the wildtype at following timepoints.
+
+#### 1h
+
+```{r, echo=FALSE, include=FALSE}
+dds.wt.1h <- dds[,dds$time_point=="1h" & dds$plant_line=="wt"]
+design(dds.wt.1h) <- ~ treatment
+dds.wt.1h <- DESeq(dds.wt.1h)
+res.wt.1h <- results(dds.wt.1h)
+res.wt.1h <- res.wt.1h[order(res.wt.1h$padj),]
+res.wt.1h.sign <- res.wt.1h[which(res.wt.1h$padj < pthresh),]
+```
+
+First 20 results with an adjusted p-value below 0.1. All results are saved in **res.wt.1h.sign.csv**.
+
+```{r, echo=FALSE}
+head(data.frame(res.wt.1h.sign), 20)
+```
+
+Get the ones that are upregulated and downregulated with Neratinib. On these enrichment analyses can be run later.
+
+Write these to file and add TAIR geneID and sort by fold change:
+
+```{r, echo=FALSE, include=FALSE}
+res.wt.1h.sign <- cbind(symbol=rownames(res.wt.1h.sign), geneid=gene2geneid[rownames(res.wt.1h.sign)], res.wt.1h.sign)
+res.wt.1h.sign.pos <- res.wt.1h.sign[res.wt.1h.sign$log2FoldChange>0,]
+res.wt.1h.sign.neg <- res.wt.1h.sign[res.wt.1h.sign$log2FoldChange<=0,]
+
+genes.wt.1h.sign.pos <- res.wt.1h.sign.pos[order(abs(res.wt.1h.sign.pos$log2FoldChange), decreasing = T),]
+genes.wt.1h.sign.neg <- res.wt.1h.sign.neg[order(abs(res.wt.1h.sign.neg$log2FoldChange), decreasing = T),]
+
+write.table(genes.wt.1h.sign.pos, file="results/new/part2/genes.wt.1h.sign.pos.csv", sep=",", row.names = F)
+write.table(genes.wt.1h.sign.neg, file="results/new/part2/genes.wt.1h.sign.neg.csv", sep=",", row.names=F)
+```
+
+#### 6h
+
+```{r, echo=FALSE, include=FALSE}
+dds.wt.6h <- dds[,dds$time_point=="6h" & dds$plant_line=="wt"]
+design(dds.wt.6h) <- ~ treatment
+dds.wt.6h <- DESeq(dds.wt.6h)
+res.wt.6h <- results(dds.wt.6h)
+res.wt.6h <- res.wt.6h[order(res.wt.6h$padj),]
+res.wt.6h.sign <- res.wt.6h[which(res.wt.6h$padj < pthresh),]
+write.table(res.wt.6h.sign, file="results/new/part2/res.wt.6h.sign.csv")
+```
+
+First 20 results with an adjusted p-value below 0.1. All results are saved in **res.wt.6h.sign.csv**.
+
+```{r, echo=FALSE}
+head(data.frame(res.wt.6h.sign), 20)
+```
+
+Get the ones that are upregulated and downregulated with Neratinib. On these enrichment analyses can be run later.
+
+Write these to file and add TAIR geneID and sort by fold change:
+
+```{r, echo=FALSE, include=FALSE}
+res.wt.6h.sign <- cbind(symbol=rownames(res.wt.6h.sign), geneid=gene2geneid[rownames(res.wt.6h.sign)], res.wt.6h.sign)
+res.wt.6h.sign.pos <- res.wt.6h.sign[res.wt.6h.sign$log2FoldChange>0,]
+res.wt.6h.sign.neg <- res.wt.6h.sign[res.wt.6h.sign$log2FoldChange<=0,]
+
+genes.wt.6h.sign.pos <- res.wt.6h.sign.pos[order(abs(res.wt.6h.sign.pos$log2FoldChange), decreasing = T),]
+genes.wt.6h.sign.neg <- res.wt.6h.sign.neg[order(abs(res.wt.6h.sign.neg$log2FoldChange), decreasing = T),]
+
+write.table(genes.wt.6h.sign.pos, file="results/new/part2/genes.wt.6h.sign.pos.csv", sep=",", row.names = F)
+write.table(genes.wt.6h.sign.neg, file="results/new/part2/genes.wt.6h.sign.neg.csv", sep=",", row.names=F)
+```
+
+### Mutant
+
+Test for differentially expressed genes in the mutant at following timepoints:
+
+#### 1h
+
+```{r, echo=FALSE, include=FALSE}
+dds.mutant.1h <- dds[,dds$time_point=="1h" & dds$plant_line=="mutant"]
+design(dds.mutant.1h) <- ~ treatment
+dds.mutant.1h <- DESeq(dds.mutant.1h)
+res.mutant.1h <- results(dds.mutant.1h)
+res.mutant.1h <- res.mutant.1h[order(res.mutant.1h$padj),]
+res.mutant.1h.sign <- res.mutant.1h[which(res.mutant.1h$padj < pthresh),]
+write.table(res.mutant.1h.sign, file="results/new/part2/res.mutant.1h.sign.csv")
+```
+
+First 20 results with an adjusted p-value below 0.1. All results are saved in **res.mutant.1h.sign.csv**.
+
+```{r, echo=FALSE}
+head(data.frame(res.mutant.1h.sign), 20)
+```
+
+Get the ones that are upregulated and downregulated with Neratinib. On these enrichment analyses can be run later.
+
+Write these to file and add TAIR geneID and sort by fold change:
+
+```{r, echo=FALSE, include=FALSE}
+res.mutant.1h.sign <- cbind(symbol=rownames(res.mutant.1h.sign), geneid=gene2geneid[rownames(res.mutant.1h.sign)], res.mutant.1h.sign)
+res.mutant.1h.sign.pos <- res.mutant.1h.sign[res.mutant.1h.sign$log2FoldChange>0,]
+res.mutant.1h.sign.neg <- res.mutant.1h.sign[res.mutant.1h.sign$log2FoldChange<=0,]
+
+genes.mutant.1h.sign.pos <- res.mutant.1h.sign.pos[order(abs(res.mutant.1h.sign.pos$log2FoldChange), decreasing = T),]
+genes.mutant.1h.sign.neg <- res.mutant.1h.sign.neg[order(abs(res.mutant.1h.sign.neg$log2FoldChange), decreasing = T),]
+
+write.table(genes.mutant.1h.sign.pos, file="results/new/part2/genes.mutant.1h.sign.pos.csv", sep=",", row.names = F)
+write.table(genes.mutant.1h.sign.neg, file="results/new/part2/genes.mutant.1h.sign.neg.csv", sep=",", row.names=F)
+```
+
+#### 6h
+
+```{r, echo=FALSE, include=FALSE}
+dds.mutant.6h <- dds[,dds$time_point=="6h" & dds$plant_line=="mutant"]
+design(dds.mutant.6h) <- ~ treatment
+dds.mutant.6h <- DESeq(dds.mutant.6h)
+res.mutant.6h <- results(dds.mutant.6h)
+res.mutant.6h <- res.mutant.6h[order(res.mutant.6h$padj),]
+res.mutant.6h.sign <- res.mutant.6h[which(res.mutant.6h$padj < pthresh),]
+write.table(res.mutant.6h.sign, file="results/new/part2/res.mutant.6h.sign.csv")
+```
+
+First 20 results with an adjusted p-value below 0.1. All results are saved in **res.mutant.6h.sign.csv**.
+
+```{r, echo=FALSE}
+head(data.frame(res.mutant.6h.sign), 20)
+```
+
+Get the ones that are upregulated and downregulated with Neratinib. On these enrichment analyses can be run later.
+
+Write these to file and add TAIR geneID and sort by fold change:
+
+```{r, echo=FALSE, include=FALSE}
+res.mutant.6h.sign <- cbind(symbol=rownames(res.mutant.6h.sign), geneid=gene2geneid[rownames(res.mutant.6h.sign)], res.mutant.6h.sign)
+res.mutant.6h.sign.pos <- res.mutant.6h.sign[res.mutant.6h.sign$log2FoldChange>0,]
+res.mutant.6h.sign.neg <- res.mutant.6h.sign[res.mutant.6h.sign$log2FoldChange<=0,]
+
+genes.mutant.6h.sign.pos <- res.mutant.6h.sign.pos[order(abs(res.mutant.6h.sign.pos$log2FoldChange), decreasing = T),]
+genes.mutant.6h.sign.neg <- res.mutant.6h.sign.neg[order(abs(res.mutant.6h.sign.neg$log2FoldChange), decreasing = T),]
+
+write.table(genes.mutant.6h.sign.pos, file="results/new/part2/genes.mutant.6h.sign.pos.csv", sep=",", row.names = F)
+write.table(genes.mutant.6h.sign.neg, file="results/new/part2/genes.mutant.6h.sign.neg.csv", sep=",", row.names=F)
+```
